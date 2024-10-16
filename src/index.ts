@@ -3,6 +3,8 @@ import express, { Express, Request, Response } from 'express';
 import dotenv from 'dotenv';
 import OpenAI from 'openai';
 
+import examples from '../data/examples';
+
 dotenv.config();
 
 const openai = new OpenAI({
@@ -32,21 +34,44 @@ app.get('/api/writer', async (req: Request, res: Response) => {
 });
 
 app.post('/api/writer', async (req: Request, res: Response) => {
-  const prompt = `Rewrite the following text in a more formal tone: 
-  ${req.body.text}`;
-
-  console.log(prompt);
-
-  const completion = await openai.chat.completions.create({
-    model: 'gpt-4o-mini',
-    messages: [
+  try {
+    const prompt = req.body.text;
+    const tone = req.body.tone || 'default';
+    const defaultMessages = [
       {
-        role: 'user',
-        content: prompt,
+        role: 'system',
+        content:
+          'The rewritten articles must feel like my past writings. Here are some examples of my past writings:',
       },
-    ],
-  });
-  res.json(completion);
+      ...examples.map((example) => ({
+        role: 'user',
+        content: example.content,
+      })),
+    ] as Array<{ role: any; content: string }>;
+
+    const completion = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [
+        ...defaultMessages,
+        {
+          role: 'system',
+          content: `You will be provided with some texts, and your task is to rewrite the following text in a ${tone} tone.
+            If past examples are provided, you should rewrite the text in a similar tone.
+            Your only goal is to rewrite the text in the chosen tone. You should not add any additional information or change the meaning of the text.
+            Correct all grammar and spelling mistakes. Make sure that the text is clear and easy to read.
+            DO NOT include the original text in your response.
+            Do not include any additional information in your response.`,
+        },
+        {
+          role: 'user',
+          content: prompt,
+        },
+      ],
+    });
+    res.json(completion);
+  } catch (error) {
+    res.status(400).json({ error });
+  }
 });
 
 app.listen(port, () => {
